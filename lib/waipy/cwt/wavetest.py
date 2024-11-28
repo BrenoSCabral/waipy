@@ -495,6 +495,35 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         plot_phase : bool, defaults to False
 
     """
+
+    '''
+    guia para mim mesmo:
+
+    ax1 = serie temporal no topo da figura de wavelet -> MUDAR A VARIAVEL PRA BOTAR A SERIE FILTRADA E ASSIM ACOMPANHAR OS PICOS
+    ax2 = plot do espectro de wavelet
+    ax3 = reposta da fucao de wavelet, na direita superior da figura
+    ax4 = comentado
+    ax5 = espectro global -> sombrear a região do ax2 onde espectro < confianca de 95
+
+    TODO:
+    1 - estabelecer alguma forma de cortar o grafico onde eu quiser no eixo x (assim ele processa toda a ondaleta, mas me da o resultado focando na
+                                                                                minha parcela de interesse)  OK
+
+
+    2 - aprender a mexer com os limites de energia no plot de colormap, assim eu posso seguir a sugestão da mariela e so ver a energia acima de
+                                                                                determinado limiar.   OK
+
+    3 - mudar o eixo y do ax 3, ao inves de forçar no codigo, passar como um kwarg    OK
+
+    ax1 - incluir uma variável a mais, para que eu possa mandar a série filtrada e ele possa plotá-la - OK, FEITO NO KWARG custom_data!
+    ax5 - incluir uma logica que sombreie a regiao do grafico  - nao necessario
+
+    TODO:
+        CRIAR UM AX6 ABAIXO DO PLOT COM A INTEGRAÇÃO DE ENERGIA ENTRE DUAS FAIXAS
+        DESTACAR A AREA QUE EU TENHO INTERESSE (3 E 30 DIAS)
+    '''
+
+
     # frequency limit
     # print result['period']
     # lim = np.where(result['period'] == result['period'][-1]/2)[0][0]
@@ -526,7 +555,8 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
     )
     ax3 = plt.subplot(gs3[0, 0])
 
-    ax1.plot(time, data)
+
+    ax1.plot(time, kwargs.get('custom_data', data))
     ax1.axis('tight')
     ax1.set_xlim(time.min(), time.max())
     ax1.set_ylabel(kwargs.get('ylabel_data', 'Amplitude'), fontsize=15)
@@ -561,11 +591,6 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         np.abs(joint_wavelet.real) > 0.05 * np.max(np.abs(joint_wavelet.real))
     )
     ax3.set_xlim(-wavelet_x[limit_index[0][0]], wavelet_x[limit_index[0][0]])
-    # ax3.axis('tight')
-    # ax3.set_xlim(-100, 100)
-    # ax3.set_ylim(-0.3,0.3)
-    # ax3.set_ylim(
-    #     [np.min(result['joint_wavelet']),np.max(result['joint_wavelet'])])
     ax3.set_xlabel('Time', fontsize=10)
     ax3.set_ylabel('Amplitude', fontsize=10)
     ax3.set_title(r'$\psi$ (t/s) {0} in time domain'.format(result['mother']))
@@ -606,14 +631,14 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
 
     else:
         #""" Contour plot wavelet power spectrum """
-        lev = levels(result, dtmin)
+        lev = kwargs.get('cmap_levels',levels(result, dtmin))
         # import IPython
         # IPython.embed()
         # exit()
-        cmap = mpl.cm.get_cmap('viridis')
-        cmap.set_over('yellow')
-        cmap.set_under('cyan')
-        cmap.set_bad('red')
+        cmap = mpl.cm.get_cmap('Spectral_r') # original era viridis aqui
+        # cmap.set_over('k') # era yellow
+        # cmap.set_under('cyan')
+        # cmap.set_bad('red')
         #ax2.imshow(np.log2(result['power']), cmap='jet', interpolation=None)
         #ax2.set_aspect('auto')
         pc = ax2.contourf(
@@ -633,14 +658,15 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         # )
 
         # 95% significance contour, levels at -99 (fake) and 1 (95% signif)
-        pc2 = ax2.contour(
+        ax2.contour(
             time,
             np.log2(result['period']),
             result['sig95'],
             [-99, 1],
-            linewidths=2
+            linewidths=1,
+            colors='k'
         )
-        pc2
+        # pc2
         ax2.plot(time, np.log2(result['coi']), 'k')
         # cone-of-influence , anything "below"is dubious
         ax2.fill_between(
@@ -663,18 +689,24 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         )
         cbar.set_label('Power')
 
-    yt = range(
+    ytick = range(
         int(np.log2(result['period'][0])),
         int(np.log2(result['period'][-1]) + 1)
     )  # create the vector of periods
+
+    yt = kwargs.get('yticks', ytick)
+
     Yticks = [float(math.pow(2, p)) for p in yt]  # make 2^periods
-    # Yticks = [int(i) for i in Yticks]
+    Yticks = [int(i) for i in Yticks]
+    
     ax2.set_yticks(yt)
     ax2.set_yticklabels(Yticks)
+
     ax2.set_ylim(
-        ymin=(np.log2(np.min(result['period']))),
-        ymax=(np.log2(np.max(result['period'])))
+        ymin=kwargs.get('ymin',  (np.log2(np.min(result['period'])))),
+        ymax=kwargs.get('ymax', (np.log2(np.max(result['period']))))
     )
+
     ax2.set_ylim(ax2.get_ylim()[::-1])
     ax2.set_xlabel(kwargs.get('xlabel_cwt', 'Time'), fontsize=12)
     ax2.set_ylabel(kwargs.get('ylabel_cwt', 'Period'), fontsize=12)
@@ -702,7 +734,8 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         label='95% confidence spectrum'
     )
     ax5.legend(loc=0)
-    ax5.set_xlim(0, 1.25 * np.max(result['global_ws']))
+
+    ax5.set_xlim(0, kwargs.get('spectrum_max', 1.25 * np.max(result['global_ws'])))
     ax5.set_xlabel('Power', fontsize=10)
     ax5.set_title('Global Wavelet Spectrum', fontsize=12)
     # save fig
@@ -719,3 +752,4 @@ def wavelet_plot(var, time, data, dtmin, result, **kwargs):
         'ax_global_spectrum': ax5,
     }
     return ret_dict
+
